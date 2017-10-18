@@ -156,3 +156,270 @@ the same as before: magento grant us a fast way of doing it.
 For adminhtml.xml we have no specific (neither great) implementation.
 Is just a common adminhtml.xml file for the permission in the 
 admin/configuration zone. 
+
+###Source and Helper - data and sql
+
+The second step is to initialize the helper(declared in the 
+configuration file). As usual we will create a Dummy class 
+(Data.php) and, to handle some configuration set in the 
+system.xml file, we must create one specific Source file:
+
+- Couponcodes.php
+
+
+Acierno/Coupon/Model/Source/Couponcodes.php
+
+
+    <?php
+    /**
+     * Acierno Coupon
+     *
+     **/
+    
+    /**
+     * Class Acierno_Coupon_Model_Source_Couponcodes
+     *
+     * Source model for Coupons,gets all the promotion active.
+     */
+    class Acierno_Coupon_Model_Source_Couponcodes
+    {
+    
+        /**
+         * toOptionArray
+         *
+         * Return the array contaning all the promotion active
+         * on Magento as for of array for the admin/configuration
+         * display
+         * @return array
+         */
+        public function toOptionArray()
+        {
+    
+            $rules = Mage::getModel('salesrule/rule')->getCollection()
+            ->addFieldToFilter('is_active',1);
+    
+            $options = array();
+    
+            foreach($rules as $rule){
+                $options[]= array(
+                    'label' => $rule->getName(),
+                    'value' => $rule->getRuleId()
+                );
+            }
+            return $options;
+        }
+    
+    
+        public function toGridArray()
+        {
+            foreach ($this->toOptionArray() as $option) {
+                $array[$option['value']] = $option['label'];
+            }
+            return $array;
+        }
+    
+
+As a source file this particular .php lets us build a select with
+all the active promotions set in Magento (by panel).
+
+For futute implementation i've added (without any particular needs)
+either the data-install and the sql install files. In this 
+version they are pointless, but in future implementation may be
+usefull. 
+
+
+##The Observer
+
+The main force and focus of this module is based on the  Observer.
+As we said before an observer is an entity in waiting for a paricular
+event (or more than one). When the event triggers, Magento throws
+the event and those that are bind to that event take place in action.
+
+Acierno/Coupon/Model/Observer.php
+
+    <?php
+    /**
+     * Acierno Coupon
+     *
+     **/
+    
+    
+    /**
+     * Class Acierno_Coupon_Model_Observer
+     *
+     * Observer for the save in Admin/configuration
+     */
+    class Acierno_Coupon_Model_Observer extends Mage_Core_Model_Session_Abstract
+    {
+        /**
+         * observersection
+         *
+         * Main method of the module, triggered at the save of
+         * configuration. Caches the data from the admin/configuration.
+         * Then goes checkes if all the date are been compiled.
+         * After Initialize a coupon generator for the specific
+         * promotion selected in the configuration and generates
+         * as many coupon for this promotion as mush have been
+         * set.
+         *
+         * In the end sends them to the email specified, with the
+         * selected template and selected email.
+         *
+         * @param Varien_Event_Observer $observer
+         * @return bool
+         */
+        public function observersection(Varien_Event_Observer $observer)
+        {
+    
+            $config = Mage::getStoreConfig('aciernocoupon/general');
+    
+            //Check if the module is enabled, if not deploy an error
+            //and goes back
+    
+            if (!is_null($config['enabled']) && $config['enabled']==1){
+    
+                //Check if all the configuration are set, if not deploys
+                //an error and goes back
+    
+                //TODO: add  !is_null($config['emailtemplate']) at the end of testing
+                if (!is_null($config['emailto']) && !is_null($config['code']) &&
+                     !is_null($config['amount'])){
+    
+                    $rule_id = $config['code'];
+                    $amount  = $config['amount'];
+                    // Get the rule in question
+                    $rule = Mage::getModel('salesrule/rule')->load($rule_id);
+                    $generator = Mage::getModel('salesrule/coupon_massgenerator');
+    
+                    $parameters = array(
+                        'count'=>$amount,
+                        'format'=>'alphanumeric',
+                        'dash_every_x_characters'=>'',
+                        'prefix'=>'',
+                        'suffix'=>'',
+                        'length'=>8
+                    );
+    
+                    if( !empty($parameters['format']) ){
+                        switch( strtolower($parameters['format']) ){
+                            case 'alphanumeric':
+                            case 'alphanum':
+                                $generator->setFormat( Mage_SalesRule_Helper_Coupon::COUPON_FORMAT_ALPHANUMERIC );
+                                break;
+                            case 'alphabetical':
+                            case 'alpha':
+                                $generator->setFormat( Mage_SalesRule_Helper_Coupon::COUPON_FORMAT_ALPHABETICAL );
+                                break;
+                            case 'numeric':
+                            case 'num':
+                                $generator->setFormat( Mage_SalesRule_Helper_Coupon::COUPON_FORMAT_NUMERIC );
+                                break;
+                        }
+                    }
+    
+                    $generator->setDash( !empty($parameters['dash_every_x_characters'])? (int) $parameters['dash_every_x_characters'] : 0);
+                    $generator->setLength( !empty($parameters['length'])? (int) $parameters['length'] : 6);
+                    $generator->setPrefix( !empty($parameters['prefix'])? $parameters['prefix'] : '');
+                    $generator->setSuffix( !empty($parameters['suffix'])? $parameters['suffix'] : '');
+    
+                    // Set the generator, and coupon type so it's able to generate
+                    $rule->setCouponCodeGenerator($generator);
+                    $rule->setCouponType( Mage_SalesRule_Model_Rule::COUPON_TYPE_AUTO );
+    
+                    // Get as many coupons as you required
+                    $count = !empty($parameters['count'])? (int) $parameters['count'] : 1;
+                    $codes = array();
+                    $html = "";
+                    for( $i = 0; $i < $count; $i++ ){
+                        $coupon = $rule->acquireCoupon();
+                        $coupon->setUsageLimit(1);
+                        $coupon->setTimesUsed(0);
+                        $coupon->setType(1);
+                        $coupon->save();
+                        $code = $coupon->getCode();
+                        $codes[] = $code;
+                        $html = $html.$code."<br>";
+                    }
+    
+                    try{
+                    $storeId = Mage::app()->getStore()->getStoreId();
+                    $emailTemplate = Mage::getModel('core/email_template')->loadByCode($config['emailtemplate']);
+                    $vars = array('custom_var1' => $codes[0], ‘custom_var’ => $codes[1]);
+                    $emailTemplate->getProcessedTemplate($vars);
+                    $emailTemplate->setSenderEmail(Mage::getStoreConfig
+                    ('trans_email/ident_general/email', $storeId));
+                    $emailTemplate->setSenderName(Mage::getStoreConfig('trans_email/ident_general/name', $storeId));
+                    $emailTemplate->send($config['emailto'],$config['emailto'], $vars);
+                    Mage::log($config['emailto'].' ha ricevuto '.$config['amount'].' coupon',
+                    null, 'coupon.txt', true);
+                    }catch(Exception $e){
+                        Mage::getSingleton('adminhtml/session')->addError($this->__('Error sending the email'));
+                    }
+                    return true;
+                }
+                Mage::getSingleton('adminhtml/session')->addError($this->__('Some required fields are missing'));
+                return false;
+            }
+            Mage::getSingleton('adminhtml/session')->addError($this->__('Module not enabled'));
+            return false;
+        }
+    }
+    
+Let's start with some specific explanation of the code: in the first
+phase we make sure that we got all the params that we need, if this is
+not the case we'll just return an error and go back to che Admin section.
+Instead, if we got all the params, that's where the magic starts!
+We start by retriving the specific promotion selected:
+
+
+    $rule = Mage::getModel('salesrule/rule')->load($rule_id);
+    $generator = Mage::getModel('salesrule/coupon_massgenerator');
+    
+The second step is to get a coupon generator, for this coupon
+we'll set all the configuration params that we need 
+
+    $parameters = array(
+        'count'=>$amount,
+        'format'=>'alphanumeric',
+        'dash_every_x_characters'=>'',
+        'prefix'=>'',
+        'suffix'=>'',
+        'length'=>8
+    );
+    
+Including the amount of coupons that we shall create, the format,
+the length and so on. 
+After we associate the coupon code generator to the promotion and set
+the type of coupon that we want
+
+    $rule->setCouponCodeGenerator($generator);
+    $rule->setCouponType( Mage_SalesRule_Model_Rule::COUPON_TYPE_AUTO );
+
+After, we'll cycle on the count variable, creating as many coupon
+as we asked. Each coupon is Aquired from the promotion by the 
+coupon generator associated. We can set the usage limmit, the 
+number of times it may be used and so on.
+
+    $storeId = Mage::app()->getStore()->getStoreId();
+    $emailTemplate = Mage::getModel('core/email_template')->loadByCode($config['emailtemplate']);
+    $vars = array('custom_var1' => $codes[0], ‘custom_var’ => $codes[1]);
+    
+    $emailTemplate->getProcessedTemplate($vars);
+    $emailTemplate->setSenderEmail(Mage::getStoreConfig
+             ('trans_email/ident_general/email', $storeId));
+             
+    $emailTemplate->setSenderName(Mage::getStoreConfig('trans_email/ident_general/name', $storeId));
+    $emailTemplate->send($config['emailto'],$config['emailto'], $vars);
+    
+    Mage::log($config['emailto'].' ha ricevuto '.$config['amount'].' coupon',
+    null, 'coupon.txt', true);
+    
+    }catch(Exception $e){
+        Mage::getSingleton('adminhtml/session')->addError($this->__('Error sending the email'));
+    }
+    
+In the end, after the creation and association of the coupons is gone good, we 
+procide with the templating of the email and the sending of it. After we log 
+the activity and thats it! 
+
+Hope this will be usefull and see you soon! 

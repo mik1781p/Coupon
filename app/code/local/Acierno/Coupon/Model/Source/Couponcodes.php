@@ -35,19 +35,6 @@ class Acierno_Coupon_Model_Source_Couponcodes
             );
         }
         return $options;
-
-        //TODO
-        /*
-        return array(
-            array(
-                'value' => 0,
-                'label' => Mage::helper('acierno_carousell')->__('Disabled')),
-            array(
-                'value' => 1,
-                'label' => Mage::helper('acierno_carousell')->__('Enabled'))
-        );
-
-        */
     }
 
 

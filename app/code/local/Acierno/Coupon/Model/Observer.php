@@ -105,12 +105,14 @@ class Acierno_Coupon_Model_Observer extends Mage_Core_Model_Session_Abstract
                 try{
                 $storeId = Mage::app()->getStore()->getStoreId();
                 $emailTemplate = Mage::getModel('core/email_template')->loadByCode($config['emailtemplate']);
-                $vars = array('custom_var1' => $codes[0], ‘custom_var’ => $codes[1]);
+                $vars = array('custom_var1' => $codes, 'custom_var2' => $config['code']);
                 $emailTemplate->getProcessedTemplate($vars);
                 $emailTemplate->setSenderEmail(Mage::getStoreConfig
                 ('trans_email/ident_general/email', $storeId));
                 $emailTemplate->setSenderName(Mage::getStoreConfig('trans_email/ident_general/name', $storeId));
                 $emailTemplate->send($config['emailto'],$config['emailto'], $vars);
+                Mage::log($config['emailto'].' ha ricevuto '.$config['amount'].' coupon',
+                null, 'coupon.txt', true);
                 }catch(Exception $e){
                     Mage::getSingleton('adminhtml/session')->addError($this->__('Error sending the email'));
                 }
