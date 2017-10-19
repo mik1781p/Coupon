@@ -42,9 +42,8 @@ class Acierno_Coupon_Model_Observer extends Mage_Core_Model_Session_Abstract
             //Check if all the configuration are set, if not deploys
             //an error and goes back
 
-            //TODO: add  !is_null($config['emailtemplate']) at the end of testing
             if (!is_null($config['emailto']) && !is_null($config['code']) &&
-                 !is_null($config['amount'])){
+                 !is_null($config['amount'])&&  !is_null($config['emailtemplate'])){
 
                 $rule_id = $config['code'];
                 $amount  = $config['amount'];
