@@ -8,6 +8,9 @@
  * Class Acierno_Coupon_Model_Source_Couponcodes
  *
  * Source model for Coupons,gets all the promotion active.
+ * @author Michele Acierno <michele.acierno@thinkopen.it>
+ * @version 0.1.0
+ * @package Cms
  */
 class Acierno_Coupon_Model_Source_Couponcodes
 {

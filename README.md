@@ -7,7 +7,7 @@ specified for a specific promotion (already created by the user).
 
 ##Use
 Is pretty simple to use this module: 
-1) Import it in your magento installation 
+1) Import and install it in your magento installation 
 2) Create a template email starting from the one specified in this repo.
 3) In the configuration panel, go to "Acierno Coupon"
 4) Specify ALL the fields required 

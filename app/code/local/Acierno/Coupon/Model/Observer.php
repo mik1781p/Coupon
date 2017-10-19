@@ -9,6 +9,9 @@
  * Class Acierno_Coupon_Model_Observer
  *
  * Observer for the save in Admin/configuration
+ * @author Michele Acierno <michele.acierno@thinkopen.it>
+ * @version 0.1.0
+ * @package Cms
  */
 class Acierno_Coupon_Model_Observer extends Mage_Core_Model_Session_Abstract
 {
